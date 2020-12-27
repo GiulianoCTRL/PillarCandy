@@ -1,14 +1,11 @@
 //! Application used to find passages and related laws from riksdagen.se
 
 use iced::{
-    Sandbox, Element, Settings,
-    Column, Row,
-    Align, Length,
-    Text,
-    TextInput, text_input,
-    Scrollable, scrollable,
-    Button, button,
+    button, scrollable, text_input, Align, Button, Column, Element, Length, Row, Sandbox,
+    Scrollable, Settings, Text, TextInput,
 };
+
+use pillar_candy::{get_law, ID};
 
 #[derive(Default)]
 struct PillarCandy {
@@ -42,23 +39,32 @@ impl Sandbox for PillarCandy {
                 self.search_text = s;
             }
             Message::ConfirmSearch => {
-                self.result_text = self.search_text.to_string();
+                let id = ID::from_string(&self.search_text);
+
+                match id {
+                    Ok(i) => {
+                        self.result_text = match get_law(i) {
+                            Ok(i) => i.text,
+                            Err(e) => e.to_string(),
+                        }
+                    }
+                    Err(e) => {
+                        self.result_text = e.to_string();
+                    }
+                }
             }
         }
     }
 
     fn view(&mut self) -> Element<Message> {
         let search_field = TextInput::new(
-            &mut self.search_input, 
-            "Search for law", 
-            &mut self.search_text, 
-            Message::SearchChanged
+            &mut self.search_input,
+            "Search for law",
+            &mut self.search_text,
+            Message::SearchChanged,
         );
 
-        let search_button = Button::new(
-            &mut self.search_confirmed, 
-            Text::new("Search")
-        );
+        let search_button = Button::new(&mut self.search_confirmed, Text::new("Search"));
 
         let search_row = Row::new()
             .spacing(20)
@@ -79,7 +85,6 @@ impl Sandbox for PillarCandy {
             .push(result)
             .into()
     }
-
 }
 
 pub fn main() -> iced::Result {
