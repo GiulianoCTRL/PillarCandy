@@ -1,0 +1,10 @@
+[package]
+name = "pillar_candy"
+version = "0.1.0"
+authors = ["GiulianoCTRL <35188493+GiulianoCTRL@users.noreply.github.com>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+iced = { version = "0.2", features = ["canvas", "image"] }
