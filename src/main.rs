@@ -1,18 +1,17 @@
 //! Application used to find passages and related laws from riksdagen.se
 
 use iced::{
-    button, scrollable, text_input, Align, Button, Column, Element, Length, Row, Sandbox,
-    Scrollable, Settings, Text, TextInput,
+    button, text_input, Align, Button, Column, Element, Length, Row, Sandbox, Settings, Text,
+    TextInput,
 };
 
-use pillar_candy::{get_law, ID};
+use pillar_candy::Law;
 
 #[derive(Default)]
 struct PillarCandy {
     search_confirmed: button::State,
     search_input: text_input::State,
     search_text: String,
-    result: scrollable::State,
     result_text: String,
 }
 
@@ -39,19 +38,7 @@ impl Sandbox for PillarCandy {
                 self.search_text = s;
             }
             Message::ConfirmSearch => {
-                let id = ID::from_string(&self.search_text);
-
-                match id {
-                    Ok(i) => {
-                        self.result_text = match get_law(i) {
-                            Ok(i) => i.text,
-                            Err(e) => e.to_string(),
-                        }
-                    }
-                    Err(e) => {
-                        self.result_text = e.to_string();
-                    }
-                }
+                self.result_text = Law::from_string(&self.search_text).text();
             }
         }
     }
@@ -60,7 +47,7 @@ impl Sandbox for PillarCandy {
         let search_field = TextInput::new(
             &mut self.search_input,
             "Search for law",
-            &mut self.search_text,
+            &self.search_text,
             Message::SearchChanged,
         );
 
@@ -72,10 +59,10 @@ impl Sandbox for PillarCandy {
             .push(search_field)
             .push(search_button.on_press(Message::ConfirmSearch));
 
-        let result = Scrollable::new(&mut self.result)
+        // TODO: Scrollable seems to be extremly laggy, but Text doesn't display the full text.
+        let result = Text::new(&self.result_text)
             .width(Length::Fill)
-            .height(Length::Fill)
-            .push(Text::new(&self.result_text));
+            .height(Length::Fill);
 
         Column::new()
             .padding(20)
