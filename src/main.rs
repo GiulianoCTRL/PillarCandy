@@ -1,15 +1,9 @@
 //! Application used to find passages and related laws from riksdagen.se
 
 use iced::{
-    button, text_input, scrollable, Align, Button, Column, Element, Length, Row, Sandbox, Settings, Text,
-    TextInput, Scrollable, Space
+    button, scrollable, text_input, Align, Button, Column, Element, Length, Row, Sandbox,
+    Scrollable, Settings, Text, TextInput,
 };
-
-use pillar_candy::Law;
-
-use select;
-use select::document::Document;
-use select::predicate::{Name, Predicate};
 
 /// This is the app itself, currently it contains the states for the search
 /// button and search input, as well as information about the search text itself
@@ -51,15 +45,7 @@ impl Sandbox for PillarCandy {
             Message::ConfirmSearch => {
                 // Bottom is just playing around, will be moved and refactored into lib.rs
                 // Works for now but non existend tags need to be handled
-                let html: &str = &Law::from_string(&self.search_text).text();
-                let document = Document::from(html);
-                let node = document.select(Name("dokumentstatus").descendant(Name("dokument"))).next().unwrap();
-                let invalid = "NA";
-                let id = node.select(Name("beteckning")).next().expect(invalid).text();
-                let date = node.select(Name("datum")).next().expect(invalid).text();
-                let titel = node.select(Name("titel")).next().expect(invalid).text();
-                let text = node.select(Name("text")).next().expect(invalid).text();
-                self.result_text = format!("[{}] {} ({})\n\n{}", id, titel, date, text);
+                self.result_text = String::from("Tbd");
             }
         }
     }

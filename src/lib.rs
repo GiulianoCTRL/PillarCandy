@@ -1,103 +1,100 @@
-//! All logic for searching laws.
-//! All information in this crate was made possible by the dokument-ID API
-//! that "sveriges riksdag"'s website provides. More information can be found here:
-//! https://data.riksdagen.se/dokumentation/sa-funkar-dokument-id/
+//! All enums & structs related to laws
 
-use std::fmt;
-mod err;
+use lazy_static::lazy_static;
+use regex::Regex;
+use select::document::Document;
+use select::predicate::{Name, Predicate};
+
+mod error;
+use error::LawErrorKind;
 
 #[allow(dead_code)]
-const URL: &str = "http://data.riksdagen.se";
-#[allow(dead_code)]
-const DOC_QUERY: &str = "dokument";
-
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct ID {
-    year: u32,
-    num: u32,
+fn law_id_valid(text: &str) -> bool {
+    lazy_static! {
+        static ref RE: Regex = Regex::new(r"^[0-9]{4}:[0-9]{1,4}$").unwrap();
+    }
+    RE.is_match(text)
 }
+
+/// Law identifier or "beteckning" of law e.g. 1998:899
+#[derive(Debug, Clone, PartialEq)]
+struct LawID(String);
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum Law {
-    ValidLaw { id: ID, text: String },
-    InvalidLaw { id: Option<ID>, error: String },
+pub struct Law {
+    year: String,
+    number: String,
+    title: String,
+    sub_title: String,
+    doc_type: String,
+    sub_type: String,
+    department: String,
+    date: String,
+    published: String,
 }
 
-impl fmt::Display for ID {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}-{}", self.year, self.num)
-    }
-}
-
-impl ID {
-    // fn new(year: u32, num: u32) -> ID {
-    //     ID { year, num }
-    // }
-
-    fn from_string(s: &str) -> Result<ID, err::ParseLawError> {
-        let mut data = [0u32; 2];
-
-        if s.matches(':').count() == 1 {
-            for (index, part) in s.split(':').enumerate() {
-                data[index] = part.parse::<u32>()?;
-            }
-            Ok(ID {
-                year: data[0],
-                num: data[1],
-            })
+#[allow(dead_code)]
+impl LawID {
+    /// Analyse if the passed string matches the law regex pattern. If
+    /// the pattern matches Result<LawID> will be returned, else Result<E> will
+    /// be returned.
+    pub fn new(id: &str) -> Result<LawID, LawErrorKind> {
+        if law_id_valid(id) {
+            Ok(LawID(String::from(id)))
         } else {
-            Err(err::ParseLawError::InvalidFormat)
+            Err(LawErrorKind::IDFormatError)
         }
     }
 
+    /// Create an URL from the law identifier
     fn to_url(&self) -> String {
-        format!("{}/{}/sfs-{}", URL, DOC_QUERY, &self)
+        format!("http://data.riksdagen.se/dokument/sfs-{}", self.0)
     }
 }
 
+#[allow(dead_code)]
 impl Law {
-    fn get_law(law_id: ID) -> Result<Law, reqwest::Error> {
-        let r = reqwest::blocking::get(&law_id.to_url())?;
-        if let Err(e) = r.error_for_status_ref() {
-            Err(e)
-        } else {
-            Ok(Law::ValidLaw {
-                id: law_id,
-                text: r.text()?,
-            })
+    fn fetch_law_data(id: LawID) -> Result<String, LawErrorKind> {
+        let r = reqwest::blocking::get(&id.to_url());
+        match r {
+            Ok(r) => Ok(r.text().unwrap()),
+            Err(r) => Err(LawErrorKind::RequestError(r)),
         }
     }
 
-    pub fn from_string(s: &str) -> Law {
-        match ID::from_string(s) {
-            Ok(i) => match Law::get_law(i) {
-                Ok(l) => l,
-                Err(e) => Law::InvalidLaw {
-                    id: Some(i),
-                    error: e.to_string(),
-                },
-            },
-            Err(e) => Law::InvalidLaw {
-                id: None,
-                error: e.to_string(),
-            },
-        }
+    fn new(id: LawID) -> Result<Law, LawErrorKind> {
+        let xml_data = Document::from(Law::fetch_law_data(id)?.as_ref());
+        let node = xml_data
+            .select(Name("dokumentstatus").descendant(Name("dokument")))
+            .next()
+            .unwrap();
+        let invalid = "NA";
+        Ok(Law {
+            year: node.select(Name("rm")).next().expect(invalid).text(),
+            number: node.select(Name("nummer")).next().expect(invalid).text(),
+            title: node.select(Name("titel")).next().expect(invalid).text(),
+            sub_title: node.select(Name("subtitel")).next().expect(invalid).text(),
+            doc_type: node.select(Name("typ")).next().expect(invalid).text(),
+            sub_type: node.select(Name("subtyp")).next().expect(invalid).text(),
+            department: node.select(Name("organ")).next().expect(invalid).text(),
+            date: node.select(Name("datum")).next().expect(invalid).text(),
+            published: node
+                .select(Name("publicerad"))
+                .next()
+                .expect(invalid)
+                .text(),
+        })
     }
+}
 
-    pub fn from_id(id: ID) -> Law {
-        match Law::get_law(id) {
-            Ok(l) => l,
-            Err(e) => Law::InvalidLaw {
-                id: None,
-                error: e.to_string(),
-            },
-        }
-    }
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-    pub fn text(&self) -> String {
-        match self {
-            Law::ValidLaw { id: _, text: s } => String::from(s),
-            Law::InvalidLaw { id: _, error: e } => String::from(e),
-        }
+    #[test]
+    fn test_confirm_valid_law_id() {
+        let expected = LawID(String::from("1998:899"));
+        let result = LawID::new("1998:899");
+        assert_eq!(expected, result.unwrap());
     }
 }
