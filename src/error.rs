@@ -7,7 +7,7 @@ use std::{error::Error, fmt};
 #[derive(Debug)]
 pub enum LawErrorKind {
     IDFormatError,
-    DataFormatError,
+    LawDataError,
     ParserError,
     RequestError(reqwest::Error),
 }
@@ -18,7 +18,7 @@ impl fmt::Display for LawErrorKind {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             LawErrorKind::IDFormatError => write!(f, "Valid LawID format is <year>:<number>."),
-            LawErrorKind::DataFormatError => write!(f, "Law does not contain valid information."),
+            LawErrorKind::LawDataError => write!(f, "Law does not contain valid information."),
             LawErrorKind::ParserError => write!(f, "Placeholder"),
             LawErrorKind::RequestError(err) => err.fmt(f),
         }

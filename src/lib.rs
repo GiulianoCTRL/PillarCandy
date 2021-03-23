@@ -2,12 +2,13 @@
 
 use lazy_static::lazy_static;
 use regex::Regex;
-use select::document::Document;
+use select::{document::Document, node::Node};
 use select::predicate::{Name, Predicate};
 
 mod error;
 use error::LawErrorKind;
 
+/// Helper function to ensure compilation of regex pattern only happens once
 #[allow(dead_code)]
 fn law_id_valid(text: &str) -> bool {
     lazy_static! {
@@ -20,8 +21,36 @@ fn law_id_valid(text: &str) -> bool {
 #[derive(Debug, Clone, PartialEq)]
 struct LawID(String);
 
+#[allow(dead_code)]
+impl LawID {
+    /// Analyse if passed string matches the law regex pattern. If
+    /// the pattern matches Result<LawID> will be returned, else Result<E> will
+    /// be returned.
+    pub fn new(id: &str) -> Result<LawID, LawErrorKind> {
+        if law_id_valid(id) {
+            Ok(LawID(String::from(id)))
+        } else {
+            Err(LawErrorKind::IDFormatError)
+        }
+    }
+    
+    /// Create an URL from the law identifier
+    fn to_url(&self) -> String {
+        format!("http://data.riksdagen.se/dokument/sfs-{}", self.0)
+    }
+
+    fn fetch_law_data(&self) -> Result<String, LawErrorKind> {
+        let r = reqwest::blocking::get(&self.to_url());
+        match r {
+            Ok(r) => Ok(r.text().unwrap()),
+            Err(r) => Err(LawErrorKind::RequestError(r)),
+        }
+    }
+}
+
+
 #[derive(Debug, Clone, PartialEq)]
-pub struct Law {
+pub struct LawData{
     year: String,
     number: String,
     title: String,
@@ -33,58 +62,38 @@ pub struct Law {
     published: String,
 }
 
-#[allow(dead_code)]
-impl LawID {
-    /// Analyse if the passed string matches the law regex pattern. If
-    /// the pattern matches Result<LawID> will be returned, else Result<E> will
-    /// be returned.
-    pub fn new(id: &str) -> Result<LawID, LawErrorKind> {
-        if law_id_valid(id) {
-            Ok(LawID(String::from(id)))
-        } else {
-            Err(LawErrorKind::IDFormatError)
-        }
-    }
 
-    /// Create an URL from the law identifier
-    fn to_url(&self) -> String {
-        format!("http://data.riksdagen.se/dokument/sfs-{}", self.0)
+fn get_node_text(node: &Node, name: &str) -> Result<String, LawErrorKind> {
+    match node.select(Name(name)).next() {
+        Some(n) => Ok(n.text()),
+        None => Err(LawErrorKind::LawDataError),
     }
 }
 
 #[allow(dead_code)]
-impl Law {
-    fn fetch_law_data(id: LawID) -> Result<String, LawErrorKind> {
-        let r = reqwest::blocking::get(&id.to_url());
-        match r {
-            Ok(r) => Ok(r.text().unwrap()),
-            Err(r) => Err(LawErrorKind::RequestError(r)),
-        }
-    }
-
-    fn new(id: LawID) -> Result<Law, LawErrorKind> {
-        let xml_data = Document::from(Law::fetch_law_data(id)?.as_ref());
-        let node = xml_data
-            .select(Name("dokumentstatus").descendant(Name("dokument")))
-            .next()
-            .unwrap();
-        let invalid = "NA";
-        Ok(Law {
-            year: node.select(Name("rm")).next().expect(invalid).text(),
-            number: node.select(Name("nummer")).next().expect(invalid).text(),
-            title: node.select(Name("titel")).next().expect(invalid).text(),
-            sub_title: node.select(Name("subtitel")).next().expect(invalid).text(),
-            doc_type: node.select(Name("typ")).next().expect(invalid).text(),
-            sub_type: node.select(Name("subtyp")).next().expect(invalid).text(),
-            department: node.select(Name("organ")).next().expect(invalid).text(),
-            date: node.select(Name("datum")).next().expect(invalid).text(),
-            published: node
-                .select(Name("publicerad"))
-                .next()
-                .expect(invalid)
-                .text(),
+impl LawData{
+    
+    fn new(id: LawID) -> Result<LawData, LawErrorKind> {
+        let xml_data = Document::from(id.fetch_law_data()?.as_ref());
+        let node = xml_data.select(Name("dokumentstatus").descendant(Name("dokument"))).next().unwrap();
+        Ok(LawData{
+            year: get_node_text(&node, "rm")?,
+            number: get_node_text(&node, "nummer")?,
+            title: get_node_text(&node, "titel")?,
+            sub_title: get_node_text(&node, "subtitel")?,
+            doc_type: get_node_text(&node, "typ")?,
+            sub_type: get_node_text(&node, "subtyp")?,
+            department: get_node_text(&node, "organ")?,
+            date: get_node_text(&node, "datum")?,
+            published: get_node_text(&node, "publicerad")?,
         })
     }
+}
+
+pub struct Law {
+    id: LawID,
+    data: LawData,
+    refs: Vec<LawID>,
 }
 
 #[cfg(test)]
